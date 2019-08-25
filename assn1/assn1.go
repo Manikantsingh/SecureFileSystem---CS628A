@@ -50,16 +50,16 @@ func main() {
 		println("Get User: ", fetchedDetails.Username, fetchedDetails.Password)
 	}
 
-	// fileError := fetchedDetails.StoreFile("filename", []byte("content of the file"))
-	// if fileError != nil {
-	// 	println("**** Unable to store file ****", fileError.Error())
-	// }
-
-	data1 := userlib.RandomBytes(4096 * 2)
-	fileError = fetchedDetails.StoreFile("filename1", data1)
+	fileError := fetchedDetails.StoreFile("filename", []byte("content of the file"))
 	if fileError != nil {
 		println("**** Unable to store file ****", fileError.Error())
 	}
+
+	// data1 := userlib.RandomBytes(4096 * 2)
+	// fileError := fetchedDetails.StoreFile("filename1", data1)
+	// if fileError != nil {
+	// 	println("**** Unable to store file ****", fileError.Error())
+	// }
 	return
 
 }
@@ -247,7 +247,7 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 
 		fileCipherText := make([]byte, userlib.BlockSize+len(MarhsaledFile))
 		fileiv := fileCipherText[:userlib.BlockSize]
-		copy(iv, userlib.RandomBytes(userlib.BlockSize))
+		copy(fileiv, userlib.RandomBytes(userlib.BlockSize))
 
 		//Encrypting file info
 		fileCipher := userlib.CFBEncrypter(FileInfoCFBKey, fileiv)
@@ -255,54 +255,6 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 
 		userlib.DatastoreSet(fileIndexHmacString, fileCipherText)
 
-		// rootPointer := blockCipherText
-		// root.DP = rootPointer
-		// println("Address of the blockCipherText:", rootPointer)
-
-		// //root.DP = rootPointer
-
-		// MarhsaledRootAfterBlockChipher, _ := json.Marshal(root)
-		// println("length of the root after storing blockcipher: ", len(MarhsaledRootAfterBlockChipher))
-		// file.RootAddressBlock = root
-
-		// //FileInfoKeyInput := []byte(userdata.Username + userdata.Password + filename)
-
-		// file.FileInfoCFBKey = FileInfoCFBKey
-		// file.StackPointer = 1
-
-		// MarshaledFileInfo, _ := json.Marshal(file)
-
-		//yet to complete below written code
-		//userlib.DatastoreSet(HmacFileIndexString, MarshaledFileInfo)
-
-		//get data from datastore
-		//retrievedFileMarhaled, _ := userlib.DatastoreGet(HmacFileIndexString)
-
-		//unmarshal file retrieved to read content
-		//_ = json.Unmarshal(retrievedFileMarhaled, &retrievedFile)
-
-		// //marshaledFileInfo, _ json.(file.)
-		// marshaledFile, _ := json.Marshal(file)
-
-		// //file arguments
-		// fileCFBKeyArgs := []byte(userdata.Username + filename)
-
-		// //Index to locate file in datastore
-		// filInfoIndex := userlib.NewHMAC(fileCFBKeyArgs)
-
-		// //store file in data at index fileInfoIndex
-		// userlib.DatastoreSet(string(filInfoIndex.Sum(nil)), marshaledFile)
-
-		// //file.fileInfoCFBKey = userlib.Argon2Key(fileCFBKeyArgs, userlib.RandomBytes(32), 32)
-
-		// //println("Actual data of direct block \"", string(file.RootAddressBlock.DP.Data), "\"")
-
-		// userlib.DatastoreSet("key", marshaledFile)
-		// fetchedBytes, _ := userlib.DatastoreGet("key")
-		// fetchedFile := &File{}
-		// json.Unmarshal(fetchedBytes, &fetchedFile)
-
-		//println("Content of fetched file: \"", string(fetchedFile.RootAddressBlock.DP.Data), "\"")
 	}
 	return err
 }
@@ -393,10 +345,6 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 
 		println("Userkey HMAC length: ", len(HMACKey))
 
-		testbytes := make([]byte, 8000*4096)
-		copy(testbytes, userlib.RandomBytes(8000*4096))
-
-		userlib.DatastoreSet("testkey", testbytes)
 		returnedbytes, _ := userlib.DatastoreGet("testkey")
 		println("len : ", len(returnedbytes))
 
