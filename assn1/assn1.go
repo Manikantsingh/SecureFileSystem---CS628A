@@ -50,16 +50,16 @@ func main() {
 		println("Get User: ", fetchedDetails.Username, fetchedDetails.Password)
 	}
 
-	fileError := fetchedDetails.StoreFile("filename", []byte("content of the file"))
-	if fileError != nil {
-		println("**** Unable to store file ****", fileError.Error())
-	}
-
-	// data1 := userlib.RandomBytes(4096 * 2)
-	// fileError = fetchedDetails.StoreFile("filename1", data1)
+	// fileError := fetchedDetails.StoreFile("filename", []byte("content of the file"))
 	// if fileError != nil {
 	// 	println("**** Unable to store file ****", fileError.Error())
 	// }
+
+	data1 := userlib.RandomBytes(4096 * 2)
+	fileError = fetchedDetails.StoreFile("filename1", data1)
+	if fileError != nil {
+		println("**** Unable to store file ****", fileError.Error())
+	}
 	return
 
 }
@@ -129,15 +129,14 @@ type User struct {
 
 //File structure needs to be store on datastore
 type File struct {
-	RootAddressBlock *Root
-	FileInfoCFBKey   []byte
-	StackPointer     int
+	RootIndexUUID uuid.UUID
+	BlockCFBKey   []byte
+	StackPointer  int
 }
 
 type Root struct {
-	DP        *Block
-	SIP2Block []Block
-	DIP2Block [][]Block
+	DP        []byte
+	SIP2Block [800][]byte
 }
 
 type Block struct {
@@ -158,23 +157,40 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 		err = errors.New("File is not a multiple fo file size\n")
 	} else {
 
-		FileIndex := []byte(userdata.Username + filename)
-		HmacFileIndex := userlib.NewHMAC(FileIndex)
-		HmacFileIndexString := string(HmacFileIndex.Sum(nil))
+		//************** Fresh Code *******************
 
-		retrievedFile := &File{}
-		file := &File{}
+		//Generating file information block index.
+		fileIndex := []byte(userdata.Username + filename)
+		fileIndexHmac := userlib.NewHMAC(fileIndex)
+		fileIndexHmacString := string(fileIndexHmac.Sum(nil))
+
+		rootKeyUUID := bytesToUUID(userlib.RandomBytes(16))
+
+		//*********************************************
+
+		// FileIndex := []byte(userdata.Username + filename)
+		// HmacFileIndex := userlib.NewHMAC(FileIndex)
+		// HmacFileIndexString := string(HmacFileIndex.Sum(nil))
+
+		// retrievedFile := &File{}
+		fileInfoBlock := &File{}
 		root := &Root{}
+
+		fileInfoBlock.RootIndexUUID = rootKeyUUID
+
+		blocksInFile := len(data) / configBlockSize
 
 		//Setting the actual data in the block with its calculated hmac
 		//************ Starting block encryption ************
 		block := &Block{}
-		block.Data = data
+		block.Data = data[:configBlockSize]
 		block.Hmac = userlib.NewHMAC(block.Data)
 		MarshaledBlockData, _ := json.Marshal(block)
 
+		println("Length of Marshaled data: ", len(MarshaledBlockData))
+
 		//Generate Block CFB encryption and decryption key.
-		BlockCFBKey := userlib.Argon2Key(FileIndex, userlib.RandomBytes(32), 32)
+		BlockCFBKey := userlib.Argon2Key(fileIndex, userlib.RandomBytes(32), 32)
 
 		//Encrypt file with above generated Block CFB
 		blockCipherText := make([]byte, userlib.BlockSize+len(MarshaledBlockData))
@@ -185,31 +201,85 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 		blockCipher.XORKeyStream(blockCipherText[userlib.BlockSize:], MarshaledBlockData)
 		// ********* Block Encryption done ************
 
-		//root.DP = blockCipher
-		file.RootAddressBlock = root
+		currentBlockIndex := 0
+		currentBytePosition := configBlockSize
+		root.SIP2Block[currentBlockIndex] = blockCipherText
+		currentBlockIndex += 1
 
-		//FileInfoKeyInput := []byte(userdata.Username + userdata.Password + filename)
+		for i := 1; i < blocksInFile; i++ {
+			currentBlock := &Block{}
+			currentBlock.Data = data[currentBytePosition : currentBytePosition+configBlockSize]
+			currentBlock.Hmac = userlib.NewHMAC(currentBlock.Data)
 
-		//Generating File CFB and Block CFB for this particular file
-		FileInfoCFBKey := userlib.Argon2Key(FileIndex, userlib.RandomBytes(32), 32)
+			MarshaledBlock, _ := json.Marshal(currentBlock)
 
-		file.FileInfoCFBKey = FileInfoCFBKey
-		file.StackPointer = 1
+			currentBlockCipher := make([]byte, len(MarshaledBlock))
+			blockCipherIntermediate := userlib.CFBEncrypter(BlockCFBKey, root.SIP2Block[currentBlockIndex-1])
+			blockCipherIntermediate.XORKeyStream(currentBlockCipher, MarshaledBlock)
 
-		MarshaledFileInfo, _ := json.Marshal(file)
+			root.SIP2Block[currentBlockIndex] = currentBlockCipher
 
-		println("Actual data of direct block \"", string(file.RootAddressBlock.DP.Data), "\"")
+			currentBlockIndex += 1
+			currentBytePosition += configBlockSize
+		}
+
+		MarshaledRoot, _ := json.Marshal(root)
+
+		rootHMAC := userlib.NewHMAC(MarshaledRoot)
+		rootHMacByte := rootHMAC.Sum(nil)
+		println("Hmac Length : ", len(rootHMacByte))
+
+		rootWithHmac := make([]byte, 32+len(MarshaledRoot))
+		copy(rootWithHmac[:32], rootHMacByte)
+		copy(rootWithHmac[len(MarshaledRoot):], MarshaledRoot)
+
+		println("length of the root before storing blockcipher: ", len(rootWithHmac))
+
+		userlib.DatastoreSet(rootKeyUUID.String(), rootWithHmac)
+
+		//Generating File CFB
+		FileInfoCFBKey := userlib.Argon2Key([]byte(userdata.Username), []byte(filename), 32)
+
+		fileInfoBlock.BlockCFBKey = BlockCFBKey
+		fileInfoBlock.StackPointer = len(data)/configBlockSize - 1
+
+		MarhsaledFile, _ := json.Marshal(fileInfoBlock)
+
+		fileCipherText := make([]byte, userlib.BlockSize+len(MarhsaledFile))
+		fileiv := fileCipherText[:userlib.BlockSize]
+		copy(iv, userlib.RandomBytes(userlib.BlockSize))
+
+		//Encrypting file info
+		fileCipher := userlib.CFBEncrypter(FileInfoCFBKey, fileiv)
+		fileCipher.XORKeyStream(fileCipherText[userlib.BlockSize:], MarhsaledFile)
+
+		userlib.DatastoreSet(fileIndexHmacString, fileCipherText)
+
+		// rootPointer := blockCipherText
+		// root.DP = rootPointer
+		// println("Address of the blockCipherText:", rootPointer)
+
+		// //root.DP = rootPointer
+
+		// MarhsaledRootAfterBlockChipher, _ := json.Marshal(root)
+		// println("length of the root after storing blockcipher: ", len(MarhsaledRootAfterBlockChipher))
+		// file.RootAddressBlock = root
+
+		// //FileInfoKeyInput := []byte(userdata.Username + userdata.Password + filename)
+
+		// file.FileInfoCFBKey = FileInfoCFBKey
+		// file.StackPointer = 1
+
+		// MarshaledFileInfo, _ := json.Marshal(file)
 
 		//yet to complete below written code
-		userlib.DatastoreSet(HmacFileIndexString, MarshaledFileInfo)
+		//userlib.DatastoreSet(HmacFileIndexString, MarshaledFileInfo)
 
 		//get data from datastore
-		retrievedFileMarhaled, _ := userlib.DatastoreGet(HmacFileIndexString)
+		//retrievedFileMarhaled, _ := userlib.DatastoreGet(HmacFileIndexString)
 
 		//unmarshal file retrieved to read content
-		_ = json.Unmarshal(retrievedFileMarhaled, &retrievedFile)
-
-		println("File Retrieved content: ", string(retrievedFile.RootAddressBlock.DP.Data))
+		//_ = json.Unmarshal(retrievedFileMarhaled, &retrievedFile)
 
 		// //marshaledFileInfo, _ json.(file.)
 		// marshaledFile, _ := json.Marshal(file)
@@ -320,6 +390,15 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		userHMAC := userlib.NewHMAC([]byte(uspass))
 		HMACKeyString := string(userHMAC.Sum(nil))
 		HMACKey := userHMAC.Sum(nil)
+
+		println("Userkey HMAC length: ", len(HMACKey))
+
+		testbytes := make([]byte, 8000*4096)
+		copy(testbytes, userlib.RandomBytes(8000*4096))
+
+		userlib.DatastoreSet("testkey", testbytes)
+		returnedbytes, _ := userlib.DatastoreGet("testkey")
+		println("len : ", len(returnedbytes))
 
 		//blockCFBKey := userlib.Argon2Key(uspass, userlib.RandomBytes(32), 32)
 		//fileInfoCFBKey := userlib.Argon2Key(uspass, userlib.RandomBytes(32), 32)
