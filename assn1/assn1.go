@@ -8,6 +8,7 @@ import (
 	// You neet to add with
 	// go get github.com/sarkarbidya/CS628-assn1/userlib
 
+	"bytes"
 	"crypto/rsa"
 	"hash"
 
@@ -50,21 +51,21 @@ func main() {
 		println("Get User: ", fetchedDetails.Username, fetchedDetails.Password)
 	}
 
-	fileError := fetchedDetails.StoreFile("filename", []byte("content of the file"))
-	if fileError != nil {
-		println("**** Unable to store file ****", fileError.Error())
-	}
+	// fileError := fetchedDetails.StoreFile("filename", []byte("content of the file"))
+	// if fileError != nil {
+	// 	println("**** Unable to store file ****", fileError.Error())
+	// }
 
 	data1 := userlib.RandomBytes(4096)
-	fileError = fetchedDetails.StoreFile("filename1", data1)
+	fileError := fetchedDetails.StoreFile("filename1", data1)
 	if fileError != nil {
 		println("**** Unable to store file ****", fileError.Error())
 	}
 
-	data2, blockerror := userDetails.LoadFile("filename", 0)
+	data2, _ := fetchedDetails.LoadFile("filename1", 0)
 
-	if userlib.Equal(data1, data2) {
-		println("data corrupted", blockerror.Error())
+	if !bytes.Equal(data1, data2) {
+		//println("data corrupted", blockerror.Error())
 	} else {
 		println("data is not corrupted")
 	}
@@ -206,10 +207,13 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 		blockCipherText := make([]byte, userlib.BlockSize+len(MarshaledBlockData))
 		iv := blockCipherText[:userlib.BlockSize]
 		copy(iv, userlib.RandomBytes(userlib.BlockSize))
+		println("IV : ", hex.EncodeToString(iv), " block CFB KEY: ", hex.EncodeToString(BlockCFBKey))
 
-		blockCipher := userlib.CFBDecrypter(BlockCFBKey, iv)
+		blockCipher := userlib.CFBEncrypter(BlockCFBKey, iv)
 		blockCipher.XORKeyStream(blockCipherText[userlib.BlockSize:], MarshaledBlockData)
 		// ********* Block Encryption done ************
+
+		//println("marshaled block:", hex.EncodeToString(blockCipherText[userlib.BlockSize:]))
 
 		currentBlockIndex := 0
 		currentBytePosition := configBlockSize
@@ -217,6 +221,7 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 		currentBlockIndex += 1
 
 		for i := 1; i < blocksInFile; i++ {
+			println("Entred In the loop ceate blocks and store")
 			currentBlock := &Block{}
 			currentBlock.Data = data[currentBytePosition : currentBytePosition+configBlockSize]
 			currentBlock.Hmac = userlib.NewHMAC(currentBlock.Data)
@@ -239,18 +244,20 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 
 		rootHMAC := userlib.NewHMAC(MarshaledRoot)
 		rootHMacByte := rootHMAC.Sum(nil)
-		println("Hmac Length : ", len(rootHMacByte))
+		//println("Hmac Length : ", len(rootHMacByte))
 
 		rootWithHmac := make([]byte, len(rootHMacByte)+len(MarshaledRoot))
 		copy(rootWithHmac[:len(rootHMacByte)], rootHMacByte)
 		copy(rootWithHmac[len(rootHMacByte):], MarshaledRoot)
 
-		println("length of the root before storing blockcipher: ", len(rootWithHmac))
+		//println("length of the root before storing blockcipher: ", len(rootWithHmac))
 
 		userlib.DatastoreSet(rootKeyUUID.String(), rootWithHmac)
+		println("File Stored at : ", rootKeyUUID.String())
 
 		//Generating File CFB
 		FileInfoCFBKey := userlib.Argon2Key([]byte(userdata.Username), []byte(filename), 32)
+		println("File Info CFB Key: ", userdata.Username, filename, hex.EncodeToString(FileInfoCFBKey))
 
 		fileInfoBlock.BlockCFBKey = BlockCFBKey
 		fileInfoBlock.StackPointer = len(data)/configBlockSize - 1
@@ -297,33 +304,92 @@ func (userdata *User) LoadFile(filename string, offset int) (data []byte, err er
 	fileinfoBlockEncrypted, ok := userlib.DatastoreGet(fileIndexString)
 	if !ok {
 		err = errors.New("File Not Found")
+		return nil, err
 	} else {
 
 		//Generate Fileinfo CFB key
 		FileInfoCFBKey := userlib.Argon2Key([]byte(userdata.Username), []byte(filename), 32)
+		println("File Info CFB Key: ", userdata.Username, filename, hex.EncodeToString(FileInfoCFBKey))
 
 		fileInfoBlockPlainText := make([]byte, len(fileinfoBlockEncrypted))
-		iv := fileinfoBlockEncrypted[:userlib.BlockSize]
-		cipherText := userlib.CFBDecrypter(FileInfoCFBKey, iv)
+		fileIV := fileinfoBlockEncrypted[:userlib.BlockSize]
+		cipherText := userlib.CFBDecrypter(FileInfoCFBKey, fileIV)
 		cipherText.XORKeyStream(fileInfoBlockPlainText[userlib.BlockSize:], fileinfoBlockEncrypted[userlib.BlockSize:])
 
 		fileInfo := fileInfoBlockPlainText[userlib.BlockSize:]
 
-		// UnmarshaledFileInfo := &File{}
-		// json.Unmarshal(fileInfo, &UnmarshaledFileInfo)
-
-		// fileHmac := UnmarshaledFileInfo[:len(fileIndexHmac)]
-		// fetchedFileHmac := userlib.NewHMAC(UnmarshaledFileInfo[len(fileIndexHmac):])
-
-		// if fileHmac != fetchedFileHmac {}
+		UnmarshaledFileInfo := &File{}
+		json.Unmarshal(fileInfo, &UnmarshaledFileInfo)
 
 		rootIndexKey := UnmarshaledFileInfo.RootIndexUUID
-		RootPointerMarshaled := userlib.DatastoreGet(rootIndexKey)
+		println("Fetching files from", rootIndexKey.String())
+		rootWithHmac, ok := userlib.DatastoreGet(rootIndexKey.String())
+		if !ok {
+			err = errors.New("file not found")
+		}
 
-		RootPlainText := &Root{}
-		json.Unmarshal(RootPointerMarshaled, RootPlainText)
+		MarshaledRootByteHmac := rootWithHmac[:len(fileIndexHmac)]
+		MarshaledRootBytes := rootWithHmac[len(fileIndexHmac):]
 
-		encryptedBlock
+		currentRootHmac := userlib.NewHMAC(MarshaledRootBytes).Sum(nil)
+
+		println(" Both hmac: ", hex.EncodeToString(MarshaledRootByteHmac), " ", hex.EncodeToString(currentRootHmac))
+
+		if !bytes.Equal(currentRootHmac, MarshaledRootByteHmac) {
+			err = errors.New("File block corrupted.")
+		}
+
+		Root := &Root{}
+		json.Unmarshal(MarshaledRootBytes, &Root)
+
+		requestedBlock := Root.SIP2Block[offset]
+
+		//Decrypting Block
+		MarshaledBlockPlainText := make([]byte, len(requestedBlock))
+		blockIV := requestedBlock[:userlib.BlockSize]
+		println("BlockIV : ", hex.EncodeToString(blockIV), " block CFB KEY: ", hex.EncodeToString(UnmarshaledFileInfo.BlockCFBKey))
+
+		cipherTextBlock := userlib.CFBDecrypter(UnmarshaledFileInfo.BlockCFBKey, blockIV)
+		cipherTextBlock.XORKeyStream(MarshaledBlockPlainText[userlib.BlockSize:], requestedBlock[userlib.BlockSize:])
+
+		//println("marshaled block 2:", hex.EncodeToString(MarshaledBlockPlainText[userlib.BlockSize:]))
+		ActualBlock := &Block{}
+		json.Unmarshal(MarshaledBlockPlainText[userlib.BlockSize:], &ActualBlock)
+
+		BlockActualData := ActualBlock.Data
+
+		BlockActualHmac := ActualBlock.Hmac
+
+		CurrentBlockHmac := userlib.NewHMAC(BlockActualData).Sum(nil)
+		println(" Both hmac: ", hex.EncodeToString(CurrentBlockHmac), " ", hex.EncodeToString(BlockActualHmac))
+		// if bytes.Equal(CurrentBlockHmac, BlockActualHmac) {
+		// 	println("Block HMAC also matched")
+		// } else {
+		// 	err = errors.New("File is corrupted")
+		// }
+
+		// if !bytes.Equal(rootHmacFetched, currentRootHmac) {
+		// 	err = errors.New("File block corrupted.")
+		// } else {
+		// 	ActualBlock := &Block{}
+
+		// 	json.Unmarshal(MarshaledPlainText[userlib.BlockSize:], &ActualBlock)
+		// 	BlockFetchedEncryptedBytes := ActualBlock.SIP2Block[offset]
+
+		// 	json.Unmarshal(blockDataPlainText[userlib.BlockSize:], &ActualBlock)
+
+		// 	BlockActualData := ActualBlock.Data
+		// 	BlockActualHmac := ActualBlock.Hmac.Sum(nil)
+
+		// 	CurrentHmac := userlib.NewHMAC(BlockActualData).Sum(nil)
+
+		// 	if bytes.Equal(CurrentHmac, BlockActualHmac) {
+		// 		data = BlockActualData
+		// 	} else {
+		// 		err = errors.New("File is corrupted")
+		// 	}
+
+		// }
 
 	}
 
