@@ -55,11 +55,21 @@ func main() {
 		println("**** Unable to store file ****", fileError.Error())
 	}
 
-	// data1 := userlib.RandomBytes(4096 * 2)
-	// fileError := fetchedDetails.StoreFile("filename1", data1)
-	// if fileError != nil {
-	// 	println("**** Unable to store file ****", fileError.Error())
-	// }
+	data1 := userlib.RandomBytes(4096)
+	fileError = fetchedDetails.StoreFile("filename1", data1)
+	if fileError != nil {
+		println("**** Unable to store file ****", fileError.Error())
+	}
+
+	data2, blockerror := userDetails.LoadFile("filename", 0)
+
+	if userlib.Equal(data1, data2) {
+		println("data corrupted", blockerror.Error())
+	} else {
+		println("data is not corrupted")
+	}
+	// setDetails.LoadFile("filename1")
+
 	return
 
 }
@@ -153,7 +163,7 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 	println("Length of the bytes given : ", len(data), " Blocks in file: ", len(data)/configBlockSize)
 
 	//Remember to remove 1!=1
-	if 1 != 1 && (len(data)%configBlockSize) != 0 {
+	if (len(data) % configBlockSize) != 0 {
 		err = errors.New("File is not a multiple fo file size\n")
 	} else {
 
@@ -213,9 +223,11 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 
 			MarshaledBlock, _ := json.Marshal(currentBlock)
 
-			currentBlockCipher := make([]byte, len(MarshaledBlock))
-			blockCipherIntermediate := userlib.CFBEncrypter(BlockCFBKey, root.SIP2Block[currentBlockIndex-1])
-			blockCipherIntermediate.XORKeyStream(currentBlockCipher, MarshaledBlock)
+			currentBlockCipher := make([]byte, userlib.BlockSize+len(MarshaledBlock))
+			currentBlockIV := blockCipherText[:userlib.BlockSize]
+			copy(currentBlockIV, userlib.RandomBytes(userlib.BlockSize))
+			blockCipherIntermediate := userlib.CFBEncrypter(BlockCFBKey, currentBlockIV)
+			blockCipherIntermediate.XORKeyStream(currentBlockCipher[userlib.BlockSize:], MarshaledBlock)
 
 			root.SIP2Block[currentBlockIndex] = currentBlockCipher
 
@@ -229,9 +241,9 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 		rootHMacByte := rootHMAC.Sum(nil)
 		println("Hmac Length : ", len(rootHMacByte))
 
-		rootWithHmac := make([]byte, 32+len(MarshaledRoot))
-		copy(rootWithHmac[:32], rootHMacByte)
-		copy(rootWithHmac[len(MarshaledRoot):], MarshaledRoot)
+		rootWithHmac := make([]byte, len(rootHMacByte)+len(MarshaledRoot))
+		copy(rootWithHmac[:len(rootHMacByte)], rootHMacByte)
+		copy(rootWithHmac[len(rootHMacByte):], MarshaledRoot)
 
 		println("length of the root before storing blockcipher: ", len(rootWithHmac))
 
@@ -277,6 +289,44 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 // LoadFile is also expected to be efficient. Reading a random block from the
 // file should not fetch more than O(1) blocks from the Datastore.
 func (userdata *User) LoadFile(filename string, offset int) (data []byte, err error) {
+
+	fileIndex := []byte(userdata.Username + filename)
+	fileIndexHmac := userlib.NewHMAC(fileIndex).Sum(nil)
+	fileIndexString := string(fileIndexHmac)
+
+	fileinfoBlockEncrypted, ok := userlib.DatastoreGet(fileIndexString)
+	if !ok {
+		err = errors.New("File Not Found")
+	} else {
+
+		//Generate Fileinfo CFB key
+		FileInfoCFBKey := userlib.Argon2Key([]byte(userdata.Username), []byte(filename), 32)
+
+		fileInfoBlockPlainText := make([]byte, len(fileinfoBlockEncrypted))
+		iv := fileinfoBlockEncrypted[:userlib.BlockSize]
+		cipherText := userlib.CFBDecrypter(FileInfoCFBKey, iv)
+		cipherText.XORKeyStream(fileInfoBlockPlainText[userlib.BlockSize:], fileinfoBlockEncrypted[userlib.BlockSize:])
+
+		fileInfo := fileInfoBlockPlainText[userlib.BlockSize:]
+
+		// UnmarshaledFileInfo := &File{}
+		// json.Unmarshal(fileInfo, &UnmarshaledFileInfo)
+
+		// fileHmac := UnmarshaledFileInfo[:len(fileIndexHmac)]
+		// fetchedFileHmac := userlib.NewHMAC(UnmarshaledFileInfo[len(fileIndexHmac):])
+
+		// if fileHmac != fetchedFileHmac {}
+
+		rootIndexKey := UnmarshaledFileInfo.RootIndexUUID
+		RootPointerMarshaled := userlib.DatastoreGet(rootIndexKey)
+
+		RootPlainText := &Root{}
+		json.Unmarshal(RootPointerMarshaled, RootPlainText)
+
+		encryptedBlock
+
+	}
+
 	return data, err
 }
 
