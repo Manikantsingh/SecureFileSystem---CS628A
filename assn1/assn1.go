@@ -33,36 +33,11 @@ import (
 )
 
 func main() {
-
-	println("starting program\n")
-
 	userDetails, _ := InitUser("mani", "pass")
+	secondUser, _ := InitUser("mani2", "pass")
+	thirdUSer, _ := InitUser("mani3", "pass")
 
-	println("Init User: ", userDetails.Username, userDetails.Password)
-
-	secondUser, err := InitUser("mani2", "pass")
-
-	if err != nil {
-		print("error occcured")
-	} else {
-		println("Init User second: ", secondUser.Username, secondUser.Password)
-	}
-
-	getUser, err := GetUser("mani", "pass")
-	if err != nil {
-		println("datacrou")
-	} else {
-		println("user details: ", getUser.Username, getUser.Password)
-	}
-
-	//thirdUSer, _ := InitUser("mani3", "pass")
-
-	secondUserFetchedDetails, err := GetUser(secondUser.Username, secondUser.Password)
-	if err != nil {
-		println("User does not exists")
-	} else {
-		println("Get User: ", secondUserFetchedDetails.Username, secondUserFetchedDetails.Password)
-	}
+	println("All three users:", userDetails.Username, " ", secondUser.Username, " ", thirdUSer.Username)
 
 	// Use this for testing purpose
 	data1 := userlib.RandomBytes(4096)
@@ -71,66 +46,58 @@ func main() {
 		println("**** Unable to store file ****", fileError.Error())
 	}
 
-	data3 := userlib.RandomBytes(4096 * 2)
-	AppendFileError := userDetails.AppendFile("filename1", data3)
-	if AppendFileError != nil {
+	data4 := userlib.RandomBytes(4096 * 799)
+	AppendFileError2 := userDetails.AppendFile("filename1", data4)
+	if AppendFileError2 != nil {
 		println("Something went wrong while appending to the file.")
 	}
 
-	data2, _ := userDetails.LoadFile("filename1", 1)
+	// msgid2, _ := userDetails.ShareFile("filename1", "mani2")
+	// _ = secondUser.ReceiveFile("filename2", "mani", msgid2)
 
-	if !userlib.Equal(data3[:configBlockSize], data2) {
-		println("data 2 data corrupted")
-	} else {
-		println("data 2 is not corrupted")
-	}
-
-	// data2, _ := userDetails.LoadFile("filename1", 1)
-
-	// if !userlib.Equal(data3[:configBlockSize], data2) {
-	// 	println("data 2 data corrupted")
-	// } else {
-	// 	println("data 2 is not corrupted")
-	// }
-	/*
-		msgid, _ := userDetails.ShareFile("filename1", "mani2")
-		// if msgid == "" {
-		// 	println("Did not receive any message")
-		// }
-	*/
-
-	msgid2, _ := userDetails.ShareFile("filename1", "mani2")
-	_ = secondUser.ReceiveFile("filename2", "mani", msgid2)
-
-	data5, _ := secondUser.LoadFile("filename2", 2)
-
-	if !userlib.Equal(data3[configBlockSize:], data5) {
-		println("data 3 corrupted")
-	} else {
-		println("data 3 is not corrupted")
-	}
-	// data6, _ := thirdUSer.LoadFile("filename3", 1)
-
-	// if !userlib.Equal(data6[:configBlockSize], data2) {
-	// 	println("data 3 corrupted")
-	// } else {
-	// 	println("data 3 is not corrupted")
+	// data3 := userlib.RandomBytes(4096 * 3)
+	// AppendFileError := secondUser.AppendFile("filename2", data3)
+	// if AppendFileError != nil {
+	// 	println("Something went wrong while appending to the file.")
 	// }
 
-	//_ = userDetails.RevokeFile("filename1")
-
-	// data5, _ := secondUser.LoadFile("filename2", 2)
-	// if !userlib.Equal(data3[configBlockSize:], data5) {
-	// 	println("data corrupted")
+	// shareerr := userDetails.RevokeFile("filename1")
+	// if shareerr != nil {
+	// 	println("you dont have access to revoke this file")
 	// } else {
-	// 	println("data is not corrupted")
+	// 	println("revoke successfull")
 	// }
 
-	// data4, _ := userDetails.LoadFile("filename1", 2)
-	// if !userlib.Equal(data3[configBlockSize:], data5) {
-	// 	println("data corrupted")
+	// data4 := userlib.RandomBytes(4096)
+	// sherr := secondUser.AppendFile("filename2", data4)
+	// if sherr != nil {
+	// 	println("file not found ")
+	// }
+
+	// data5
+	// if !userlib.Equal(data5, data4) {
+	// 	println("data 5 data corrupted")
 	// } else {
-	// 	println("data is not corrupted")
+	// 	println("data 5 is not corrupted")
+	// }
+
+	// erred := userDetails.ReceiveFile("filename1", "mani2", msdid2)
+	// if erred != nil {
+	// 	println("could not receive file")
+	// }
+
+	// data4 := userlib.RandomBytes(4096)
+	// AppendFileError2 := userDetails.AppendFile("filename1", data4)
+	// if AppendFileError2 != nil {
+	// 	println("Something went wrong while appending to the file.")
+	// }
+
+	// data5, _ := secondUser.LoadFile("filename2", 4)
+
+	// if !userlib.Equal(data5, data4) {
+	// 	println("data 5 data corrupted")
+	// } else {
+	// 	println("data 5 is not corrupted")
 	// }
 
 	return
@@ -207,7 +174,8 @@ type File struct {
 
 type Root struct {
 	DP        []byte
-	SIP2Block [800][]byte
+	SIP2Block [1000][]byte
+	Top       int
 }
 
 type Block struct {
@@ -279,7 +247,11 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 
 		//println("Block Data: ", hex.EncodeToString(block.Data))
 
-		MarshaledBlockData, _ := json.Marshal(block)
+		MarshaledBlockData, err1 := json.Marshal(block)
+		if err1 != nil {
+			err = errors.New("Unamrshaling failed")
+			return err
+		}
 		//println("Marshal of block : ", 0, " ", string(MarshaledBlockData))
 
 		//println("Length of Marshaled data: ", string(MarshaledBlockData))
@@ -299,9 +271,14 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 
 		currentBlockIndex := 0
 		root.SIP2Block[currentBlockIndex] = blockCipherText
+		root.Top = 0
 		currentBlockIndex += 1
 
-		MarshaledRoot, _ := json.Marshal(root)
+		MarshaledRoot, err2 := json.Marshal(root)
+		if err2 != nil {
+			err = errors.New("Unamrshaling failed")
+			return err
+		}
 		println("length Root Marshaled ", len(MarshaledRoot))
 
 		//rootHMAC := userlib.NewHMAC(MarshaledRoot)
@@ -324,7 +301,11 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 		fileInfoBlock.BlockCFBKey = BlockCFBKey
 		fileInfoBlock.StackPointer = 0 //len(data)/configBlockSize
 
-		MarhsaledFile, _ := json.Marshal(fileInfoBlock)
+		MarhsaledFile, err3 := json.Marshal(fileInfoBlock)
+		if err3 != nil {
+			err = errors.New("Unamrshaling failed")
+			return err
+		}
 
 		FileInfoHMAC := createHMAC(fileIndex, MarhsaledFile)
 		MarshaledFileWithHMAC := make([]byte, 32+len(MarhsaledFile))
@@ -359,6 +340,12 @@ func (userdata *User) StoreFile(filename string, data []byte) (err error) {
 // the block size; if it is not, AppendFile must return an error.
 // AppendFile : Function to append the file
 func (userdata *User) AppendFile(filename string, data []byte) (err error) {
+
+	println("********************************************************")
+	println("********************************************************")
+	println("****************Appending Block*********************")
+	println("********************************************************")
+	println("********************************************************")
 
 	if filename == "" || len(data)%configBlockSize != 0 {
 		err = errors.New("Given data is not a multiple of block size")
@@ -417,14 +404,22 @@ func (userdata *User) AppendFile(filename string, data []byte) (err error) {
 		println("Blocks stored sofar: ", StackPointer+1)
 
 		println("//\n*************** Calling Encrypt block and store function *********** \n")
-		StackPointer, _ = EncryptBlockAndStore(BlockIndexKey, BlockCFBKey, StackPointer, data, fileIndexHmac, FileInfoCFBKey)
+		StackPointer, fileErr := EncryptBlockAndStore(BlockIndexKey, BlockCFBKey, StackPointer, data, fileIndexHmac, FileInfoCFBKey)
+		if fileErr != nil {
+			err = errors.New("Failed to append")
+			return err
+		}
 		println("// **************** Blocks currently present on file ==========> ", StackPointer+1, " \n")
 
 		println("//\n************ update file info block agan with latest stack pointer ************\n")
 		FileInfo.StackPointer = StackPointer
 
 		println("// *********** Marshal file info again to store ************")
-		marshaledFileInfoAfterUpdate, _ := json.Marshal(FileInfo)
+		marshaledFileInfoAfterUpdate, err4 := json.Marshal(FileInfo)
+		if err4 != nil {
+			err = errors.New("Unamrshaling failed")
+			return err
+		}
 
 		//FileInfoHMAC := userlib.NewHMAC(marshaledFileInfoAfterUpdate).Sum(nil)
 		FileInfoHMAC := createHMAC(fileIndex, marshaledFileInfoAfterUpdate)
@@ -478,7 +473,7 @@ func EncryptBlockAndStore(RootIndexKey string, BlockCFBKey []byte, StackPointer 
 	json.Unmarshal(RootData, &root)
 	//println("\nlets see what is in root", string(RootData))
 
-	currentBlockIndex := StackPointer
+	currentBlockIndex := root.Top
 	currentBytePosition := 0
 	currentBlockIndex += 1
 
@@ -494,7 +489,11 @@ func EncryptBlockAndStore(RootIndexKey string, BlockCFBKey []byte, StackPointer 
 		currentBlock.Hmac = createHMAC(BlockCFBKey, currentBlock.Data)
 
 		println("// ************ Marshaled the block before encrypting *******************")
-		MarshaledBlock, _ := json.Marshal(currentBlock)
+		MarshaledBlock, err5 := json.Marshal(currentBlock)
+		if err5 != nil {
+			err = errors.New("Unamrshaling failed")
+			return 0, err
+		}
 
 		println("//************* Encryting Block using blockCFB key *******************")
 		currentBlockCipher := make([]byte, userlib.BlockSize+len(MarshaledBlock))
@@ -514,9 +513,14 @@ func EncryptBlockAndStore(RootIndexKey string, BlockCFBKey []byte, StackPointer 
 	}
 
 	StackTop = currentBlockIndex - 1
+	root.Top = currentBlockIndex - 1
 
 	println("//************ Now Marshal the root again to store back **************")
-	MarshaledRoot, _ := json.Marshal(root)
+	MarshaledRoot, err6 := json.Marshal(root)
+	if err6 != nil {
+		err = errors.New("Unamrshaling failed")
+		return 0, err
+	}
 	//println("************** let's see the roo situation after append is over.***************\n")
 	//println(string(MarshaledRoot))
 
@@ -632,7 +636,7 @@ func (userdata *User) LoadFile(filename string, offset int) (data []byte, err er
 		json.Unmarshal(MarshaledRootBytes, &Root)
 		//println("unmarshaled root : ", len(rootWithHmac))
 
-		if offset < 0 || offset > StackPointer {
+		if offset < 0 || offset > Root.Top {
 			err = errors.New("offset not in range")
 			return nil, err
 		}
@@ -725,13 +729,25 @@ func (userdata *User) ShareFile(filename string, recipient string) (msgid string
 		println("BlockCFB to decrypt the block is: ", hex.EncodeToString(BlockCFBKey))
 		println("Blocks stored sofar: ", StackPointer+1)
 
+		println("Check if root if present at the given location")
+		_, ok := userlib.DatastoreGet(rootIndexKey)
+		if !ok {
+			println("could not find the root")
+			err = errors.New("Could not find the root")
+			return "", err
+		}
+
 		println("// \n************** creating share file record ************ \n")
 		SharingInfo := &sharingRecord{}
 		SharingInfo.RootUUIDKey = UnmarshaledFileInfo.RootIndexUUID
 		SharingInfo.BlockCFBKey = UnmarshaledFileInfo.BlockCFBKey
 		SharingInfo.StackPointer = UnmarshaledFileInfo.StackPointer
 
-		MarshaledSharingRecord, _ := json.Marshal(SharingInfo)
+		MarshaledSharingRecord, err7 := json.Marshal(SharingInfo)
+		if err7 != nil {
+			err = errors.New("Unamrshaling failed")
+			return "", err
+		}
 
 		println("//\n ********* Getting Recievers private key from the data store ************\n")
 
@@ -761,8 +777,11 @@ func (userdata *User) ShareFile(filename string, recipient string) (msgid string
 		message.EncryptedMessage = EncryptedMessage
 		message.Sign = SignedMessage
 
-		MarshaledMessage, _ := json.Marshal(message)
-
+		MarshaledMessage, err8 := json.Marshal(message)
+		if err8 != nil {
+			err = errors.New("Unamrshaling failed")
+			return "", err
+		}
 		println("// *********** Encoded signed message to string for sharing ********** \n")
 		msgid = hex.EncodeToString(MarshaledMessage)
 		//println(" \n*********** Messge ID ", msgid, "************** \n")
@@ -786,7 +805,11 @@ func (userdata *User) ReceiveFile(filename string, sender string, msgid string) 
 	println("// \n *************** Decoding string back to signed message and encrypted message  ********** \n")
 
 	messageID := &message{}
-	message, _ := hex.DecodeString(msgid)
+	message, err9 := hex.DecodeString(msgid)
+	if err9 != nil {
+		err = errors.New("could not decode")
+		return err
+	}
 
 	//println(" \n*********** Marshaled Message: ", message, "************** \n")
 	json.Unmarshal(message, &messageID)
@@ -838,7 +861,12 @@ func (userdata *User) ReceiveFile(filename string, sender string, msgid string) 
 	println("//\n ********** file will be store at this location ********* ", hex.EncodeToString(fileIndexHmac), " \n")
 
 	println("// \n ********* marshaling file info before storing ******* \n")
-	marshaledFileInfo, _ := json.Marshal(FileInfo)
+	marshaledFileInfo, err10 := json.Marshal(FileInfo)
+	if err10 != nil {
+		err = errors.New("Unamrshaling failed")
+		return err
+	}
+
 	fileInfoHMAC := createHMAC(fileIndex, marshaledFileInfo)
 
 	marshaledFileInfoWithHMAC := make([]byte, 32+len(marshaledFileInfo))
@@ -887,45 +915,83 @@ func (userdata *User) RevokeFile(filename string) (err error) {
 		fileInfoBlockPlainText := make([]byte, len(fileInfoBlockEncrypted))
 		fileIV := fileInfoBlockEncrypted[:userlib.BlockSize]
 
+		println("revoke file file IV: ", hex.EncodeToString(fileIV))
+
 		fileCipher := userlib.CFBDecrypter(FileInfoCFBKey, fileIV)
 		fileCipher.XORKeyStream(fileInfoBlockPlainText[userlib.BlockSize:], fileInfoBlockEncrypted[userlib.BlockSize:])
 
+		MarshaledFileInfoWithHMAC := fileInfoBlockPlainText[userlib.BlockSize:]
+		previousFileHMAC := MarshaledFileInfoWithHMAC[:32]
+		MarshaledFileInfo := MarshaledFileInfoWithHMAC[32:]
+
+		currentHMAC := createHMAC(fileIndex, MarshaledFileInfo)
+		println("File HMAC verification: ", hex.EncodeToString(currentHMAC), hex.EncodeToString(previousFileHMAC))
+
+		if !userlib.Equal(currentHMAC, previousFileHMAC) {
+			println("You dont have access to the file")
+			err = errors.New("You dont have access to view this file")
+			return err
+		} else {
+			println("File HMAC verified in revoke file")
+		}
+
 		println("// \n************ Generate new BlockCFBKey to Re-Encrypt each block again with new key  *********\n")
 		newBlockCFBKey := userlib.Argon2Key(fileIndex, userlib.RandomBytes(32), 32)
+		newRootKeyUUID := bytesToUUID(userlib.RandomBytes(16))
+
+		println("newBlockCFB and newRootUUID location", hex.EncodeToString(newBlockCFBKey), newRootKeyUUID.String())
 
 		println("//\n************* Unmarshaling file info block ******************\n")
 		FileInfo := &File{}
-		json.Unmarshal(fileInfoBlockPlainText[userlib.BlockSize:], &FileInfo)
+		json.Unmarshal(MarshaledFileInfo, &FileInfo)
 
 		println("//\n************* Extracting required details from file info Block *********\n")
-		BlockIndexKey := FileInfo.RootIndexUUID.String()
-		BlockCFBKey := FileInfo.BlockCFBKey
+		oldBlockIndexKey := FileInfo.RootIndexUUID.String()
+		//BlockCFBKey := FileInfo.BlockCFBKey
 		StackPointer := FileInfo.StackPointer
-		println("Root is store at : ", BlockIndexKey)
-		println("BlockCFB to decrypt the block is: ", hex.EncodeToString(BlockCFBKey))
-		println("Blocks stored sofar: ", StackPointer+1)
 
-		DecrypteAndEncryptAgain(fileIndex, FileInfo.RootIndexUUID, FileInfo.BlockCFBKey, FileInfo.StackPointer, newBlockCFBKey)
+		decryptError := DecrypteAndEncryptAgain(newRootKeyUUID, fileIndex, FileInfo.RootIndexUUID, FileInfo.BlockCFBKey, FileInfo.StackPointer, newBlockCFBKey)
+		if decryptError != nil {
+			err = errors.New("you dont have access to change the file")
+			return err
+		}
 
 		println("// \n **************** setting new details in the file again. **************** \n")
 		FileInfo.BlockCFBKey = newBlockCFBKey
+		FileInfo.RootIndexUUID = newRootKeyUUID
+		println("Root is store at : ", FileInfo.RootIndexUUID.String())
+		println("BlockCFB to decrypt the block is: ", hex.EncodeToString(FileInfo.BlockCFBKey))
+		println("Blocks stored sofar: ", StackPointer+1)
 
-		newlyMarshaledFileInfo, _ := json.Marshal(FileInfo)
+		newlyMarshaledFileInfo, err11 := json.Marshal(FileInfo)
+		if err11 != nil {
+			err = errors.New("Unamrshaling failed")
+			return err
+		}
+
+		newFileHMAC := createHMAC(fileIndex, newlyMarshaledFileInfo)
+
+		newFileWithHMAC := make([]byte, 32+len(newlyMarshaledFileInfo))
+		copy(newFileWithHMAC[:32], newFileHMAC)
+		copy(newFileWithHMAC[32:], newlyMarshaledFileInfo)
 
 		println("// **************** file info block IV ************** ", hex.EncodeToString(fileIV))
-		fileCipherText := make([]byte, userlib.BlockSize+len(newlyMarshaledFileInfo))
+		fileCipherText := make([]byte, userlib.BlockSize+len(newFileWithHMAC))
 		copy(fileCipherText[:userlib.BlockSize], fileIV)
 		fileCipherT := userlib.CFBEncrypter(FileInfoCFBKey, fileIV)
-		fileCipherT.XORKeyStream(fileCipherText[userlib.BlockSize:], newlyMarshaledFileInfo)
+		fileCipherT.XORKeyStream(fileCipherText[userlib.BlockSize:], newFileWithHMAC)
 
 		userlib.DatastoreSet(fileIndexString, fileCipherText)
+
+		println("Removing previous entries of root from the datastore")
+		userlib.DatastoreDelete(oldBlockIndexKey)
 
 	}
 
 	return err
 }
 
-func DecrypteAndEncryptAgain(fileIndex []byte, RootIndexUUID uuid.UUID, oldBlockCFBKey []byte, StackPointer int, newBlockCFBKey []byte) (err error) {
+func DecrypteAndEncryptAgain(newRootKeyUUID uuid.UUID, fileIndex []byte, RootIndexUUID uuid.UUID, oldBlockCFBKey []byte, StackPointer int, newBlockCFBKey []byte) (err error) {
 
 	println("// \n ********** Fetch Root present at RootIndexUUID at : ************* ", RootIndexUUID.String(), "\n")
 
@@ -936,10 +1002,9 @@ func DecrypteAndEncryptAgain(fileIndex []byte, RootIndexUUID uuid.UUID, oldBlock
 		return err
 	} else {
 
-		fileIndexHmac := userlib.NewHMAC(fileIndex).Sum(nil)
-		RootPreviousHmac := MarshaledRootWithHmac[:len(fileIndexHmac)]
-		RootData := MarshaledRootWithHmac[len(fileIndexHmac):]
-		CurrentRootHmac := userlib.NewHMAC(RootData).Sum(nil)
+		RootPreviousHmac := MarshaledRootWithHmac[:32]
+		RootData := MarshaledRootWithHmac[32:]
+		CurrentRootHmac := createHMAC(oldBlockCFBKey, RootData)
 
 		if !userlib.Equal(RootPreviousHmac, CurrentRootHmac) {
 			println("\nThere is some issue with  MAC : PreviousHMAC: ", hex.EncodeToString(RootPreviousHmac), " CurrentHMAC: ", hex.EncodeToString(CurrentRootHmac), "\n")
@@ -955,7 +1020,7 @@ func DecrypteAndEncryptAgain(fileIndex []byte, RootIndexUUID uuid.UUID, oldBlock
 
 		println("New Block Key Generated  ", hex.EncodeToString(newBlockCFBKey))
 
-		ExistingBlocksInFile := StackPointer + 1
+		ExistingBlocksInFile := root.Top + 1
 
 		for i := 0; i < ExistingBlocksInFile; i++ {
 			if root.SIP2Block[i] != nil {
@@ -965,17 +1030,37 @@ func DecrypteAndEncryptAgain(fileIndex []byte, RootIndexUUID uuid.UUID, oldBlock
 				println("// ************* Decrypt with previous CFB key and IV: ******** ", hex.EncodeToString(oldBlockCFBKey), "\n")
 				BlockToEncrypt := make([]byte, len(BlockToDecrypt))
 				BlockIV := BlockToDecrypt[:userlib.BlockSize]
+				//copy(BlockToEncrypt[:userlib.BlockSize], BlockIV)
 
 				BlockCipherText := userlib.CFBDecrypter(oldBlockCFBKey, BlockIV)
 				BlockCipherText.XORKeyStream(BlockToEncrypt[userlib.BlockSize:], BlockToDecrypt[userlib.BlockSize:])
 
+				marshaledBlock := BlockToEncrypt[userlib.BlockSize:]
+
+				tempBlock := &Block{}
+				json.Unmarshal(marshaledBlock, &tempBlock)
+
+				data := tempBlock.Data
+				//previousHMAc := tempBlock.Hmac
+
+				newHMAC := createHMAC(newBlockCFBKey, data)
+				tempBlock.Hmac = newHMAC
+
+				marshaledBlockWithNewHMAC, err12 := json.Marshal(tempBlock)
+				if err12 != nil {
+					err = errors.New("Unamrshaling failed")
+					return err
+				}
+
 				println("// \n*********** Decryption done for block , ", i, "   ====== > Encrypting it with new blockCFBKey  *******, ", hex.EncodeToString(newBlockCFBKey), "\n")
-				EncryptedBlock := make([]byte, len(BlockToEncrypt))
+				EncryptedBlock := make([]byte, userlib.BlockSize+len(marshaledBlockWithNewHMAC))
 				newBlockIV := EncryptedBlock[:userlib.BlockSize]
 				copy(newBlockIV, userlib.RandomBytes(userlib.BlockSize))
 
+				println("Block IV for ", i, " ", hex.EncodeToString(newBlockIV))
+
 				BlockCipherT := userlib.CFBEncrypter(newBlockCFBKey, newBlockIV)
-				BlockCipherT.XORKeyStream(EncryptedBlock[userlib.BlockSize:], BlockToEncrypt[userlib.BlockSize:])
+				BlockCipherT.XORKeyStream(EncryptedBlock[userlib.BlockSize:], marshaledBlockWithNewHMAC)
 
 				println("\n********* Block :", i, " Re-Encryption Over ********** \n")
 				root.SIP2Block[i] = EncryptedBlock
@@ -984,18 +1069,21 @@ func DecrypteAndEncryptAgain(fileIndex []byte, RootIndexUUID uuid.UUID, oldBlock
 		}
 
 		println("//\n ********** remarshal root  ************** \n")
-		newlyMarshaledRoot, _ := json.Marshal(root)
-
-		newlyMarshaledRootHMAC := userlib.NewHMAC(newlyMarshaledRoot).Sum(nil)
+		newlyMarshaledRoot, err13 := json.Marshal(root)
+		if err13 != nil {
+			err = errors.New("Unamrshaling failed")
+			return err
+		}
 
 		println("//************ HMAC of Marshaled root is appended ****************")
-		MarshaledRootWithHmacBytes := make([]byte, len(newlyMarshaledRootHMAC)+len(newlyMarshaledRoot))
-		copy(MarshaledRootWithHmacBytes[:len(newlyMarshaledRootHMAC)], newlyMarshaledRootHMAC)
-		copy(MarshaledRootWithHmacBytes[len(newlyMarshaledRootHMAC):], newlyMarshaledRoot)
+		newlyMarshaledRootHMAC := createHMAC(newBlockCFBKey, newlyMarshaledRoot)
+		newMarshaledRootWithHMAC := make([]byte, 32+len(newlyMarshaledRoot))
+		copy(newMarshaledRootWithHMAC[:32], newlyMarshaledRootHMAC)
+		copy(newMarshaledRootWithHMAC[32:], newlyMarshaledRoot)
 
-		RootIndexKey := RootIndexUUID.String()
+		RootIndexKey := newRootKeyUUID.String()
 		println("// \n ************ Encrypted Root Stored Back at location :  ****************** ")
-		userlib.DatastoreSet(RootIndexKey, MarshaledRootWithHmacBytes)
+		userlib.DatastoreSet(RootIndexKey, newMarshaledRootWithHMAC)
 
 	}
 
@@ -1038,7 +1126,11 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		}
 
 		argonKey := userlib.Argon2Key([]byte(username), []byte(password), 16)
-		RSAPrivKey, _ := userlib.GenerateRSAKey()
+		RSAPrivKey, err20 := userlib.GenerateRSAKey()
+		if err20 != nil {
+			err = errors.New("Generate key failed")
+			return nil, err
+		}
 
 		userdataptr = &User{}
 		userdataptr.Username = username
@@ -1046,7 +1138,11 @@ func InitUser(username string, password string) (userdataptr *User, err error) {
 		userdataptr.RSAPrivKey = *RSAPrivKey
 
 		//Convert userdata to bytes
-		marshaledData, _ := json.Marshal(userdataptr)
+		marshaledData, err15 := json.Marshal(userdataptr)
+		if err15 != nil {
+			err = errors.New("Unamrshaling failed")
+			return nil, err
+		}
 
 		dataHMAC := createHMAC(uspass, marshaledData)
 		marshaledDataWithHMAC := make([]byte, len(dataHMAC)+len(marshaledData))
